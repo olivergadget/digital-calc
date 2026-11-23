@@ -63,6 +63,7 @@
   /* ---------- Code list ---------- */
   #codes{flex-direction:column;background:#0b0e1c;overflow-y:auto}
   #codeList{max-width:1000px;width:100%;margin:0 auto;padding:4px 20px 30px}
+  .chead{margin-top:18px;color:#8d98c7;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
   .crow{display:flex;gap:16px;align-items:baseline;padding:13px 0;border-bottom:1px solid #1e2750}
   .crow b{font-size:22px;font-variant-numeric:tabular-nums;color:#5ce1ff;min-width:72px}
   .crow span{color:#c9d3ff;font-size:15px}
@@ -148,7 +149,7 @@
 /* =====================================================
    SETTINGS
    ===================================================== */
-const VERSION = "22";   // shown at the bottom of every screen; bump on every update
+const VERSION = "23";   // shown at the bottom of every screen; bump on every update
 
 // Game requests go to this form; the answers are collected by the form itself.
 const REQUEST_FORM_URL = "https://forms.gle/m2qGqXSPpsvo3iob7";
@@ -160,8 +161,9 @@ const ADMIN_1 = "0709", ADMIN_2 = "0819";
 
 // Access codes: type one on the calculator, then press =.
 // "all" opens every game; a list opens only those games (use the ids from GAMES below).
-// A game marked everyone:true shows up for every code. Every new game gets its own code here,
-// and the secret code list (0709 then 0819) is built from this table, so new codes appear there automatically.
+// Every game has its OWN code that opens only that game. If a game is ever added without one,
+// ensureOwnCodes() below makes one for it automatically. The secret code list (0709 then 0819)
+// is built from this table, so every code, old or new, always appears there.
 const CODES = {
   "1337": "all",
   // one code per game
@@ -208,10 +210,22 @@ const GAMES = [
   { id:"gridiron", name:"Retro Gridiron", tag:"Pixel football", icon:"🏈", color:"linear-gradient(135deg,#2f9e44,#8ce99a)", mount:retroGridiron },
   { id:"chess", name:"Chess", tag:"Play against the NPC", icon:"♟️", color:"linear-gradient(135deg,#eeeed5,#7b945a)", mount:chessGame },
   { id:"soccer", name:"Pocket Soccer 3D", tag:"3D soccer vs the CPU", icon:"⚽", color:"linear-gradient(135deg,#37b24d,#d3f9d8)", mount:soccer },
-  { id:"road", name:"Line Driver", tag:"Draw the route · 103 levels", icon:"🚗", color:"linear-gradient(135deg,#5aa856,#3b4048)", everyone:true, mount:lineDriver },
+  { id:"road", name:"Line Driver", tag:"Draw the route · 103 levels", icon:"🚗", color:"linear-gradient(135deg,#5aa856,#3b4048)", mount:lineDriver },
   { id:"dog", name:"Bone Hound", tag:"Feed, walk, dig up dino bones", icon:"🐶", color:"linear-gradient(135deg,#c58a4f,#fff3bf)", mount:boneHound },
   { id:"escape", name:"Escape Road", tag:"By AZGames · loads from azgames.io", icon:"🚓", color:"linear-gradient(135deg,#ffd43b,#e03131)", mount:frameGame("https://azgames.io/escape-road.embed","AZGames") },
 ];
+
+// Guarantee: every game has a code of its own.
+function ownCode(id){ return Object.keys(CODES).find(c => Array.isArray(CODES[c]) && CODES[c].length===1 && CODES[c][0]===id); }
+(function ensureOwnCodes(){
+  GAMES.forEach(g => {
+    if (ownCode(g.id)) return;
+    let h = 7; for (const ch of g.id) h = (h*31 + ch.charCodeAt(0)) % 9000;
+    let code = String(1000 + h);
+    while (CODES[code] || code===ADMIN_1 || code===ADMIN_2) code = String(1000 + (++h % 9000));
+    CODES[code] = [g.id];
+  });
+})();
 
 /* =====================================================
    Calculator
@@ -317,14 +331,21 @@ function openGame(g){
 function closeGame(){ if (stopGame){ stopGame(); stopGame=null; } $("stage").innerHTML=""; }
 function showCodes(){
   const list = $("codeList"); list.innerHTML = "";
-  Object.keys(CODES).forEach(code => {
-    const a = CODES[code], row = document.createElement("div"); row.className = "crow";
+  const gameName = id => (GAMES.find(g => g.id===id) || {name:id}).name;
+  const head = text => { const h = document.createElement("div"); h.className = "chead"; h.textContent = text; list.appendChild(h); };
+  const row = (code, text) => {
+    const r = document.createElement("div"); r.className = "crow";
     const b = document.createElement("b"); b.textContent = code;
-    const t = document.createElement("span");
-    const extra = GAMES.filter(g => g.everyone && a!=="all" && !a.includes(g.id)).map(g => g.name);
-    t.textContent = a==="all" ? "Everything" : a.map(id => (GAMES.find(g => g.id===id) || {name:id}).name).concat(extra).join(", ");
-    row.appendChild(b); row.appendChild(t); list.appendChild(row);
-  });
+    const t = document.createElement("span"); t.textContent = text;
+    r.appendChild(b); r.appendChild(t); list.appendChild(r);
+  };
+  const codes = Object.keys(CODES), shown = new Set();
+  head("Everything");
+  codes.filter(c => CODES[c]==="all").forEach(c => { row(c, "Every game and tool"); shown.add(c); });
+  head("One code per game");
+  GAMES.forEach(g => { const c = ownCode(g.id); if (c){ row(c, g.name); shown.add(c); } });
+  const rest = codes.filter(c => !shown.has(c));
+  if (rest.length){ head("Combo codes"); rest.forEach(c => row(c, CODES[c].map(gameName).join(", "))); }
   go("codes");
 }
 $("codesBack").onclick = () => go("calc");
@@ -334,7 +355,7 @@ document.addEventListener("keydown", e => { if (e.key==="Escape" && $("player").
 
 function buildGrid(access){
   const grid = $("grid"); grid.innerHTML = "";
-  GAMES.filter(g => access==="all" || g.everyone || access.includes(g.id)).forEach(g => {
+  GAMES.filter(g => access==="all" || access.includes(g.id)).forEach(g => {
     const c = document.createElement("button"); c.className="card";
     c.innerHTML = '<div class="thumb" style="background:'+g.color+'">'+g.icon+'</div><div class="meta"><div class="name"></div><div class="tag"></div></div>';
     c.querySelector(".name").textContent = g.name;

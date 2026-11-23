@@ -148,7 +148,7 @@
 /* =====================================================
    SETTINGS
    ===================================================== */
-const VERSION = "21";   // shown at the bottom of every screen; bump on every update
+const VERSION = "22";   // shown at the bottom of every screen; bump on every update
 
 // Game requests go to this form; the answers are collected by the form itself.
 const REQUEST_FORM_URL = "https://forms.gle/m2qGqXSPpsvo3iob7";
@@ -172,6 +172,7 @@ const CODES = {
   "5472": ["soccer"],
   "4390": ["road"],
   "6638": ["dog"],
+  "7315": ["escape"],
   // combos
   "4821": ["melon", "chess"],
   "7706": ["gridiron", "soccer"],
@@ -183,11 +184,21 @@ const CODES = {
    Each game: { name, tag, icon, color, mount(stage) -> stop() }
    For a game hosted elsewhere, use: mount: frameGame("https://...")
    ===================================================== */
-function frameGame(url){
+function frameGame(url, maker){
   return stage => {
+    // The game itself stays on its maker's servers; this only shows their player in a frame.
+    const note = document.createElement("div");
+    note.style.cssText = "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;color:#8d98c7;font-size:15px;line-height:1.5";
+    note.textContent = window.claude
+      ? "This game loads from " + maker + ", and the Claude preview blocks other sites. It will load on your hosted site."
+      : "Loading from " + maker + "… (needs internet)";
+    stage.appendChild(note);
+    if (window.claude) return () => note.remove();   // other sites can't be framed inside Claude, so don't try
     const f = document.createElement("iframe");
-    f.src = url; f.allow = "fullscreen; gamepad"; stage.appendChild(f);
-    return () => f.remove();
+    f.src = url; f.allow = "fullscreen; gamepad; autoplay"; f.allowFullscreen = true; f.title = "Game from " + maker;
+    f.style.background = "transparent";
+    stage.appendChild(f);
+    return () => { f.remove(); note.remove(); };
   };
 }
 
@@ -199,6 +210,7 @@ const GAMES = [
   { id:"soccer", name:"Pocket Soccer 3D", tag:"3D soccer vs the CPU", icon:"⚽", color:"linear-gradient(135deg,#37b24d,#d3f9d8)", mount:soccer },
   { id:"road", name:"Line Driver", tag:"Draw the route · 103 levels", icon:"🚗", color:"linear-gradient(135deg,#5aa856,#3b4048)", everyone:true, mount:lineDriver },
   { id:"dog", name:"Bone Hound", tag:"Feed, walk, dig up dino bones", icon:"🐶", color:"linear-gradient(135deg,#c58a4f,#fff3bf)", mount:boneHound },
+  { id:"escape", name:"Escape Road", tag:"By AZGames · loads from azgames.io", icon:"🚓", color:"linear-gradient(135deg,#ffd43b,#e03131)", mount:frameGame("https://azgames.io/escape-road.embed","AZGames") },
 ];
 
 /* =====================================================
